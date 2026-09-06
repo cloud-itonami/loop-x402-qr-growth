@@ -1,0 +1,7 @@
+{:schema "nexus.qr.markets.v1"
+ :markets [{:id "JP" :language "ja" :status :hypothesis :segment :ticket-kiosks :evidence []}
+           {:id "US" :language "en" :status :hypothesis :segment :crypto-native-events :evidence []}
+           {:id "EEA" :language "en" :status :hypothesis :requires-country-selection true :evidence []}
+           {:id "SG" :language "en" :status :hypothesis :segment :merchant-pilots :evidence []}
+           {:id "LATAM" :language "es" :status :hypothesis :requires-country-selection true :evidence []}]
+ :note "Research hypotheses only; no legal admission or live availability claim."}

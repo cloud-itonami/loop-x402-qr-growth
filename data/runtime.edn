@@ -1,0 +1,3 @@
+{:schema "nexus.qr.runtime.v1" :profile-id "x402-qr-growth"
+ :provisioned? false :scheduled? false :external-outreach-enabled? false
+ :note "Destination provisioning must be measured separately."}
