@@ -1,3 +1,6 @@
 {:schema "nexus.qr.runtime.v1" :profile-id "x402-qr-growth"
+ :repo "https://github.com/cloud-itonami/loop-x402-qr-growth"
+ :profile-admission :accepted
+ :validator-source "cloud-itonami/cloud-itonami-app src/cloud/itonami/app/repo_profile.cljc main (observed 2026-09-06)"
  :provisioned? false :scheduled? false :external-outreach-enabled? false
- :note "Destination provisioning must be measured separately."}
+ :note "Repository profile and public observation script are operational artifacts. No destination Bot or recurring execution was created; the installed resident CLI predates repo-profile support. Profile discovery is not runtime provisioning."}
