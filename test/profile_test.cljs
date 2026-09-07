@@ -1,10 +1,177 @@
-(ns profile-test (:require [cljs.reader :as r] ["fs" :as fs]))
-(def p (r/read-string (.readFileSync fs ".itonami/profile.edn" "utf8")))
-(def markets (r/read-string (.readFileSync fs "data/markets.edn" "utf8")))
-(assert (= "cloud.itonami.app.repo-profile.v1" (:profile/schema p)))
-(assert (= "x402-qr-growth" (:profile/id p)))
-(assert (< (count (:bot/brief p)) 2000))
-(assert (every? #{:profile/schema :profile/id :bot/name :bot/brief :bot/context-refs :bot/tools-requested} (keys p)))
-(assert (every? #(= :hypothesis (:status %)) (:markets markets)))
-(assert (every? #(.existsSync fs %) (:bot/context-refs p)))
-(println "Profile contract PASS")
+(ns profile-test
+  "Contract test for this repository. Run: `nbb test/profile_test.cljs`.
+
+  The profile in `.itonami/profile.edn` is a DESCRIPTION, not an authority
+  (docs/operating-contract.md, \"Metrics and authority\"). Nothing in this
+  repository may request a tool, enable outreach, or admit a country. These
+  checks pin that, plus the consistency of the observation record with the
+  script that writes it and the README that documents it.
+
+  Output contract (read by scripts/maturity-loop in the superproject):
+    exit 0 + `x402 profile contract: all green`   every check passed
+    exit 1 + one `FAIL <check-name>` line per failure
+    exit 2 + `REFUSED`                            an input could not be read;
+                                                  this is not a pass.
+  Each check prints its name on PASS too, so a skipped check and a passed
+  check never look the same."
+  (:require [cljs.reader :as r]
+            [clojure.string :as str]
+            ["fs" :as fs]
+            ["crypto" :as crypto]))
+
+;; ---------------------------------------------------------------------------
+;; inputs — refuse to answer if any is unreadable (exit 2, never a pass)
+;; ---------------------------------------------------------------------------
+
+(defn- read-text [path]
+  (try (.readFileSync fs path "utf8")
+       (catch :default e
+         (println (str "REFUSED: cannot read " path " — " (.-message e)))
+         (js/process.exit 2))))
+
+(defn- read-edn [path]
+  (try (r/read-string (read-text path))
+       (catch :default e
+         (println (str "REFUSED: " path " is not readable EDN — " (.-message e)))
+         (js/process.exit 2))))
+
+(def profile     (read-edn ".itonami/profile.edn"))
+(def markets     (read-edn "data/markets.edn"))
+(def runtime     (read-edn "data/runtime.edn"))
+(def observation (read-edn "reports/latest-observation.edn"))
+(def observe-src (read-text "scripts/observe.cljs"))
+(def readme      (read-text "README.md"))
+
+;; Limits copied from the validator that admits this file:
+;; cloud-itonami/cloud-itonami-app src/cloud/itonami/app/repo_profile.cljc
+;; (max-name 60, max-brief 2000, max-id 120). A value over these is refused
+;; by the destination, so it is refused here first.
+(def max-name 60)
+(def max-brief 2000)
+(def max-id 120)
+
+;; The only keys this repository writes. The validator admits a few more
+;; (:profile/for :profile/default? :bot/avatar :bot/model-preference
+;; :cli/config); this repository deliberately uses none of them, and any key
+;; outside the validator's vocabulary — `:bot/tools`, `:bot/wallet-key` — is
+;; refused by name upstream. Keeping the local set smaller than the validator's
+;; means a new key here is a diff someone has to explain.
+(def description-keys
+  #{:profile/schema :profile/id :bot/name :bot/brief :bot/context-refs :bot/tools-requested})
+
+(defn- within? [limit s] (<= (count (str s)) limit))
+
+;; Boundary self-check of the predicate itself: exactly-at-limit passes,
+;; one-over fails. A `<` typo would pass every real input and still be wrong.
+(assert (within? 3 "abc"))
+(assert (not (within? 3 "abcd")))
+
+(defn- sha256-hex [s]
+  (.digest (.update (.createHash crypto "sha256") s) "hex"))
+
+(defn- country-code? [id] (boolean (re-matches #"[A-Z]{2}" (str id))))
+
+(defn- observe-url
+  "The URL `scripts/observe.cljs` fetches, read from its source text."
+  []
+  (second (re-find #"\(def url \"([^\"]+)\"\)" observe-src)))
+
+;; ---------------------------------------------------------------------------
+;; checks: [name pass?]
+;; ---------------------------------------------------------------------------
+
+(def checks
+  [;; -- profile: a description, not an authority
+   ["profile-schema-is-repo-profile-v1"
+    (= "cloud.itonami.app.repo-profile.v1" (:profile/schema profile))]
+   ["profile-id-is-x402-qr-growth"
+    (= "x402-qr-growth" (:profile/id profile))]
+   ["profile-keys-are-only-the-six-description-keys"
+    (and (= description-keys (set (keys profile)))
+         (every? description-keys (keys profile)))]
+   ["profile-requests-no-tools"
+    (= [] (:bot/tools-requested profile))]
+   ["profile-name-within-validator-limit"
+    (and (string? (:bot/name profile))
+         (not (str/blank? (:bot/name profile)))
+         (within? max-name (:bot/name profile)))]
+   ["profile-brief-within-validator-limit"
+    (and (string? (:bot/brief profile)) (within? max-brief (:bot/brief profile)))]
+   ["profile-id-within-validator-limit"
+    (within? max-id (:profile/id profile))]
+   ["profile-context-refs-exist"
+    (and (vector? (:bot/context-refs profile))
+         (seq (:bot/context-refs profile))
+         (every? #(.existsSync fs %) (:bot/context-refs profile)))]
+   ["brief-forbids-funds-and-unauthorized-contact"
+    (let [b (str (:bot/brief profile))]
+      (and (str/includes? b "No funds")
+           (str/includes? b "explicit authorization")))]
+
+   ;; -- markets: hypotheses until a named reviewer admits them
+   ["markets-schema-is-v1"
+    (= "nexus.qr.markets.v1" (:schema markets))]
+   ["markets-are-all-hypotheses"
+    (and (seq (:markets markets))
+         (every? #(= :hypothesis (:status %)) (:markets markets)))]
+   ["market-ids-are-unique"
+    (= (count (:markets markets)) (count (set (map :id (:markets markets)))))]
+   ["non-country-buckets-require-country-selection"
+    ;; EEA / LATAM are research buckets. A bucket carrying a merchant :segment,
+    ;; or lacking the flag, is being treated as a jurisdiction it is not.
+    (every? (fn [{:keys [id requires-country-selection segment]}]
+              (if (country-code? id)
+                (not requires-country-selection)
+                (and (true? requires-country-selection) (nil? segment))))
+            (:markets markets))]
+
+   ;; -- runtime: honest about what exists, and outreach is never enabled here
+   ["runtime-schema-is-v1"
+    (= "nexus.qr.runtime.v1" (:schema runtime))]
+   ["runtime-profile-id-matches-profile"
+    (= (:profile/id profile) (:profile-id runtime))]
+   ["runtime-never-enables-external-outreach"
+    (false? (:external-outreach-enabled? runtime))]
+   ["runtime-provisioning-flags-are-booleans"
+    (and (boolean? (:provisioned? runtime)) (boolean? (:scheduled? runtime)))]
+
+   ;; -- observation: the record agrees with the script and with itself
+   ["observation-url-matches-observe-script"
+    (and (some? (observe-url)) (= (observe-url) (:url observation)))]
+   ["readme-discovery-url-matches-observe-target"
+    (and (some? (observe-url)) (str/includes? readme (observe-url)))]
+   ["observation-reachability-agrees-with-status"
+    (= (boolean (:reachable? observation))
+       (boolean (and (number? (:http-status observation))
+                     (<= 200 (:http-status observation) 299))))]
+   ["observation-digest-matches-recorded-body"
+    (and (string? (:body observation))
+         (= (:sha256 observation) (sha256-hex (:body observation))))]
+   ["observation-body-parses-as-nexus-qr-v1"
+    (try (= "nexus.qr.v1" (.-schema (js/JSON.parse (:body observation))))
+         (catch :default _ false))]
+   ["observation-keeps-unmeasured-claims-explicit"
+    ;; \"Unmeasured is not zero.\" Both keys must be present and say so.
+    (and (= :unmeasured (:physical-issuance observation))
+         (= :unmeasured (:external-demand observation)))]
+   ["observe-script-records-unmeasured-not-zero"
+    ;; The record above could be stale; the script is what writes the next one.
+    (and (str/includes? observe-src ":physical-issuance :unmeasured")
+         (str/includes? observe-src ":external-demand :unmeasured"))]
+
+   ;; -- README: the runbook names files that exist
+   ["readme-commands-name-files-that-exist"
+    (let [cmds (map second (re-seq #"`nbb ([^`\s]+)`" readme))]
+      (and (seq cmds) (every? #(.existsSync fs %) cmds)))]])
+
+;; ---------------------------------------------------------------------------
+;; report
+;; ---------------------------------------------------------------------------
+
+(let [failed (vec (remove second checks))]
+  (doseq [[nm ok?] checks]
+    (println (str (if ok? "PASS " "FAIL ") nm)))
+  (println (str "checked=" (count checks) " failed=" (count failed)))
+  (if (empty? failed)
+    (println "x402 profile contract: all green")
+    (js/process.exit 1)))
