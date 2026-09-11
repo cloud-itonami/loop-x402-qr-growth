@@ -1,5 +1,5 @@
 (ns profile-test
-  "Contract test for this repository. Run: `nbb test/profile_test.cljk`.
+  "Contract test for this repository. Run: `kbb --backend sci test/profile_test.cljk`.
 
   The profile in `.itonami/profile.edn` is a DESCRIPTION, not an authority
   (docs/operating-contract.md, \"Metrics and authority\"). Nothing in this
