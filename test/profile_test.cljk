@@ -1,5 +1,5 @@
 (ns profile-test
-  "Contract test for this repository. Run: `nbb test/profile_test.cljs`.
+  "Contract test for this repository. Run: `nbb test/profile_test.cljk`.
 
   The profile in `.itonami/profile.edn` is a DESCRIPTION, not an authority
   (docs/operating-contract.md, \"Metrics and authority\"). Nothing in this
@@ -39,7 +39,7 @@
 (def markets     (read-edn "data/markets.edn"))
 (def runtime     (read-edn "data/runtime.edn"))
 (def observation (read-edn "reports/latest-observation.edn"))
-(def observe-src (read-text "scripts/observe.cljs"))
+(def observe-src (read-text "scripts/observe.cljk"))
 (def readme      (read-text "README.md"))
 
 ;; Limits copied from the validator that admits this file:
@@ -72,7 +72,7 @@
 (defn- country-code? [id] (boolean (re-matches #"[A-Z]{2}" (str id))))
 
 (defn- observe-url
-  "The URL `scripts/observe.cljs` fetches, read from its source text."
+  "The URL `scripts/observe.cljk` fetches, read from its source text."
   []
   (second (re-find #"\(def url \"([^\"]+)\"\)" observe-src)))
 

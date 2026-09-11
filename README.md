@@ -10,7 +10,7 @@ Implementation: https://github.com/network-awai/nexus-x402 (access controlled). 
 
 New operator? Walk `docs/operator-quickstart.md` — one observation end to end, with the exit codes and the two failure modes.
 
-`nbb scripts/observe.cljs` performs one bounded GET and records status, body digest, timestamp, and uncertainty in `reports/latest-observation.edn`. No payments or prospect messages. `nbb test/profile_test.cljs` validates this repository's contract.
+`nbb scripts/observe.cljk` performs one bounded GET and records status, body digest, timestamp, and uncertainty in `reports/latest-observation.edn`. No payments or prospect messages. `nbb test/profile_test.cljk` validates this repository's contract.
 
 On a CLI release supporting repo profiles, `itonami profile explain` shows selection. `itonami chat --profile x402-qr-growth` requires a destination Bot. See `data/runtime.edn` for measured provisioning state; cloning does not schedule a Bot.
 

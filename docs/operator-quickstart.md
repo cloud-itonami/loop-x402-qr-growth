@@ -20,7 +20,7 @@ procedure seems to require any of those, stop and read
 ## 1. Check the contract before you touch anything
 
 ```
-nbb test/profile_test.cljs
+nbb test/profile_test.cljk
 ```
 
 25 named checks. Read the **exit code**, not the last line:
@@ -38,7 +38,7 @@ already red, you cannot tell your change apart from what you inherited.
 ## 2. Take one observation
 
 ```
-nbb scripts/observe.cljs
+nbb scripts/observe.cljk
 ```
 
 One bounded GET of `https://x402.nexus/qr/capabilities` (15 s timeout,
